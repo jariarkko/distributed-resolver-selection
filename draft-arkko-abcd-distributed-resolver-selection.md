@@ -131,13 +131,13 @@ A variant of the {{namebased}} approach is that one does not consider the full n
 The equation then becomes:
 
     i = h(client identity|organization suffix of the queried name|
-         client public address) %  n
+          client public address) %  n
 
 ## Early recommendations
 
 The name- and suffix-based approaches seem to be more capable than random- or round-robin -based approaches.
 
-# Further  work {#furtherwork}
+# Further work {#furtherwork}
 
 TBD
 
