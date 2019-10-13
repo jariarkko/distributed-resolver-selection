@@ -37,7 +37,13 @@ informative:
   RFC8484:
   I-D.ietf-tls-esni:
   I-D.ietf-quic-transport:
-  
+  I-D.schinazi-httpbis-doh-preference-hints:
+  MSCVUS:
+   title: Microsoft Corp. v. United States
+   author:
+    - ins: Wikipedia
+   seriesinfo: https://en.wikipedia.org/wiki/Microsoft_Corp._v._United_States
+
 --- abstract
 
 This memo discusses the use of a set of different DNS resolvers to reduce privacy problems related to resolvers learning the Internet usage patterns of their clients.
@@ -62,11 +68,13 @@ The rest of this memo is organized as follows. {{goals}} specifies the requireme
 
 # Goals {#goals}
 
-There are many possible goals for building distributed services, with the most typical one being the ability to scale to be able to serve large number of clients. This memo is not focused on this aspect, but rather looks at distributing queries to different resolver service providers to provided what privacy benefits.
+There are many possible goals for building distributed services, with the most typical one being the ability to scale to be able to serve large number of clients. This memo is not focused on this aspect, but rather looks at distributing queries to different resolver service providers to provide privacy benefits.
 
-The question is how to reduce information learned by any individual resolver service provider through distribution of queries from different clients. Note that such individual resolver service providers themselves may in turn be distributed in other ways (e.g., through use of anycast or other scaling techniques).
+The background for looking at different service providers is that it is unlikely that there are significant difference with regards to privacy issues within the same provider, even if its servers are distributed in different locations. Any technical vulnerabilities or commercial objectives apply throughout such networks anyway, and government and surveillance activities seem to have extraterritorial reach (see, e.g., {{MSCVUS}}).
 
-Some of the basic goals that this distribution should achive include:
+As a result, the main privacy question is how to reduce information learned by any individual resolver service provider through distribution of queries from different clients.
+
+Some of the basic goals that this distribution should achieve include:
 
 * Not concentrating information from all clients to a single resolver service.
 
@@ -84,6 +92,8 @@ The latter goal can be broken further down to:
 
 Some of these goals depend on which component in a system is performing the queries. The web page goal above can only be done by browsers, whereas the other rules could also be implemented in an OS-based resolver client.
 
+Note that there are also other possible goals, e.g., around discovery of DNS servers (see, e.g., {{I-D.schinazi-httpbis-doh-preference-hints}}). These goals are outside the scope of this memo, as it is only concerned with selection from a set of known servers.
+
 # Potential selection algorithms {#algorithms}
 
 This section introduces and analyzes several potential strategies for distributing queries to different resolvers. Each strategy is formulated as an algorithm for choosing a resolver Ri from a set of n resolvers R1, R2, ...,  Rn.
@@ -100,7 +110,7 @@ One way of doing this is to hash the client's identity in some manner:
 
 Note that the client identity can (and should) be something that remains private to the client itself; the resolver service need not be told about the identity, even if the client's concept of its own identity leads it to select a particular resolver service. To avoid disclosing DNS usage patterns to all resolvers, the identity needs to be persistent information, perhaps obtained from the operating system, user account, hardware, or a random value chosen upon the first use of the application.
 
-While this algorithm satisfies the first overall goal in {{goals}}, it does nothing about splitting information regarding a particular client to different services.
+While this algorithm satisfies the first overall goal in {{goals}}, it does nothing about splitting information regarding a particular client to different services. The only privacy benefit it provides is that it reduces the number of clients that each resolver service provider has information about. This may discourage attacking that service, or forcing the service to give out information. But for each individual client, there is still some resolver service that knows everything about the user's DNS usage patterns.
 
 ## Random
 
@@ -149,4 +159,4 @@ TBD
 
 # Acknowledgements {#ack}
 
-The authors would like to thank Christian Huitema, Ari Keranen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuhlewind, David Allan and many others for interesting discussions in this problem space.
+The authors would like to thank Christian Huitema, Ari Keranen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuhlewind, David Allan, Daniel Migault and many others for interesting discussions in this problem space.
