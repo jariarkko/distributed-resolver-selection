@@ -46,7 +46,9 @@ This memo discusses the use of a set of different DNS resolvers to reduce privac
 
 # Introduction {#introduction}
 
-When a DNS client {{RFC1035}} uses a resolver service, that service learns information about the client's usage patterns, such as the applications the user is using, what web sites are visited, and so on. While Internet communications are increasingly protected by encrypting both content and control information {{RFC8446}}, {{RFC8484}}, {{I-D.ietf-quic-transport}}, {{I-D.ietf-tls-esni}}, the DNS resolver service becomes aware of the specific domains being queried, and is typically also aware of which client made the query.
+Internet communications are increasingly protected, by use of encryption {{RFC8446}}, {{RFC8484}}, {{I-D.ietf-quic-transport}}, {{I-D.ietf-tls-esni}}.
+
+When a DNS client {{RFC1035}} uses a resolver service, that service learns what applications the user is using, what web sites are visited, and so on. Even with the protection of communications, DNS resolvers themselves remain as a persistent vulnerability with respect to privacy as it is aware of both the client and their usage patterns.
 
 Leaking this information to the Internet infrastructure component such as a DNS resolver service can be problematic when the service is not entirely trusted. And even when  the service is trusted and well maintained, legal and commercial pressures or surveillance activity may result in some of the information given to the service to be misused, particularly when a service holds information for a large number of users. This is not desirable.
 
@@ -96,7 +98,9 @@ One way of doing this is to hash the client's identity in some manner:
 
     i = h(client identity) % n
 
-While this satisfies the first overall goal in {{goals}}, it does nothing about splitting information regarding a particular client to different services.
+Note that the client identity can (and should) be something that remains private to the client itself; the resolver service need not be told about the identity, even if the client's concept of its own identity leads it to select a particular resolver service. To avoid disclosing DNS usage patterns to all resolvers, the identity needs to be persistent information, perhaps obtained from the operating system, user account, hardware, or a random value chosen upon the first use of the application.
+
+While this algorithm satisfies the first overall goal in {{goals}}, it does nothing about splitting information regarding a particular client to different services.
 
 ## Random
 
@@ -124,6 +128,8 @@ This approach may also be extended to cover moving hosts by incorporating the pu
 
     i = h(client identity|queried name|client public address) % n
 
+When the hash function only takes into account the name and nothing else, different clients will algorithmically arrive at the use of the same resolver for the same names. This can be undesirable. When address and identity information is used alongside the name, this is no longer a problem.
+
 ## Suffix-based
 
 A variant of the {{namebased}} approach is that one does not consider the full name, but rather the main domain, i.e., example.com rather than www.example.com. To do this, one can use a public suffix list that provides information about commonly used domain names.
@@ -143,4 +149,4 @@ TBD
 
 # Acknowledgements {#ack}
 
-The authors would like to thank Christian Huitema, Ari Keranen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuhlewind and many others for interesting discussions in this problem space.
+The authors would like to thank Christian Huitema, Ari Keranen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuhlewind, David Allan and many others for interesting discussions in this problem space.
