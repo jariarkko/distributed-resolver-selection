@@ -31,7 +31,6 @@ author:
 normative:
 
 informative:
-  RFC7258:
   I-D.schinazi-httpbis-doh-preference-hints:
   MSCVUS:
    title: Microsoft Corp. v. United States
