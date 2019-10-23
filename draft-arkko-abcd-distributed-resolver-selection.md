@@ -31,8 +31,8 @@ author:
 normative:
 
 informative:
-  RFC1035: 
-  RFC7258: 
+  RFC1035:
+  RFC7258:
   RFC8446:
   RFC8484:
   I-D.ietf-tls-esni:
