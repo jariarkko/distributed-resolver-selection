@@ -31,12 +31,7 @@ author:
 normative:
 
 informative:
-  RFC1035:
   RFC7258:
-  RFC8446:
-  RFC8484:
-  I-D.ietf-tls-esni:
-  I-D.ietf-quic-transport:
   I-D.schinazi-httpbis-doh-preference-hints:
   MSCVUS:
    title: Microsoft Corp. v. United States
@@ -52,17 +47,21 @@ This memo discusses the use of a set of different DNS resolvers to reduce privac
 
 # Introduction {#introduction}
 
-Internet communications are increasingly protected, by use of encryption {{RFC8446}}, {{RFC8484}}, {{I-D.ietf-quic-transport}}, {{I-D.ietf-tls-esni}}.
+Internet communications are increasingly protected by use of encryption {{?TLS13=RFC8446}}, {{?QUIC=I-D.ietf-quic-transport}}, {{?ESNI=I-D.ietf-tls-esni}}.
 
-When a DNS client {{RFC1035}} uses a resolver service, that service learns what applications the user is using, what web sites are visited, and so on. Even with the protection of communications, DNS resolvers themselves remain as a persistent vulnerability with respect to privacy as it is aware of both the client and their usage patterns.
+Encryption of DNS transport between stub and recursive resolvers is defined in {{!DOT=RFC7858}} and {{!DOH=RFC8484}}.  These protocols provide confidentiality for DNS queries to a recursive resolver.
 
-Leaking this information to the Internet infrastructure component such as a DNS resolver service can be problematic when the service is not entirely trusted. And even when  the service is trusted and well maintained, legal and commercial pressures or surveillance activity may result in some of the information given to the service to be misused, particularly when a service holds information for a large number of users. This is not desirable.
+Recursive resolvers present a privacy dichotomy for clients.  A recursive resolver that aggregates queries from multiple clients provides a measure of anonymity for those clients, both for authoritative servers and from other observers on the network.  Aggregating requests from multiple clients makes it difficult for these entities to correlate queries with specific clients.  The potential for a recursive to answer queries from cache further improves this privacy advantage, while providing significant query latency gains.  However, because the recursive resolver sees and can record DNS queries, using a recursive resolver creates a privacy exposure for clients.
+
+A client might decide to trust a particular recursive resolver with information about DNS queries.  However, it is difficult or impossible to provide any guarantees about data handling practices in the general case.  And even if a service can be trusted to respect privacy with respect to handling of query data, legal and commercial pressures or surveillance activity could result misuse of data.  Similarly, it is not possible to make any guarantees about attacks on services.  For a service with many clients, these risks are particularly undesirable.
 
 Defending against privacy leaks for DNS queries is particularly important given the prevalence of pervasive surveillance efforts {{RFC7258}}.
 
-This memo discusses the use of a set of different DNS resolvers to reduce privacy problems related to DNS resolvers. The architectural principle followed here is one of attempting to avoid high-value targets and the concentration of any individual users's information in one place. We outline a number of different strategies for distributing queries to the different resolvers and analyze the privacy and other impacts of those strategies. Our observation is that a simplistic models -- such as a round-robin algorithm -- are not necessarily the best suited for this task.
+This memo describes techniques for distributing DNS queries between multiple recursive resolvers from a known set.  The goal is to reduce the amount of information that any signal DNS resolver is able to gain and thereby reduce the amount of privacy-sensitive information that can be collected in one place.  The characteristics of different choices are examined.
 
-The focus of this document is precisely only the choice of a resolver from a known set. There are many other worthwhile topics in the general space of providing better confidentiality or privacy for DNS queries, or for operating encrypted DNS query services. Topics such as resolver discovery, operational practices at any individial resolver service, etc. are outside the scope of this memo.
+An important outcome of this analysis is that simplistic methods for distributing queries -- such as a round-robin algorithm -- have considerably worse privacy characteristics than using a single recursive resolver.
+
+There are many other worthwhile topics in the general space of providing better confidentiality or privacy for DNS queries, or for operating encrypted DNS query services. Topics such as resolver discovery, operational practices at any individial resolver service, etc. are outside the scope of this memo.
 
 The rest of this memo is organized as follows. {{goals}} specifies the requirements that we would like such a distribution arrangement to provide. {{algorithms}} discusses the different strategies, and makes some early recommendations among the strategies. {{furtherwork}} discusses potential further work in this area.
 
