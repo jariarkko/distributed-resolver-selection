@@ -1,0 +1,448 @@
+
+
+
+
+Network Working Group                                           J. Arkko
+Internet-Draft                                                  Ericsson
+Intended status: Informational                                M. Thomson
+Expires: April 16, 2020                                          Mozilla
+                                                               T. Hardie
+                                                                  Google
+                                                        October 14, 2019
+
+
+      Selecting Resolvers from a Set of Distributed DNS Resolvers
+            draft-arkko-abcd-distributed-resolver-selection
+
+Abstract
+
+   This memo discusses the use of a set of different DNS resolvers to
+   reduce privacy problems related to resolvers learning the Internet
+   usage patterns of their clients.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on April 16, 2020.
+
+Copyright Notice
+
+   Copyright (c) 2019 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents
+   (https://trustee.ietf.org/license-info) in effect on the date of
+   publication of this document.  Please review these documents
+   carefully, as they describe your rights and restrictions with respect
+   to this document.  Code Components extracted from this document must
+   include Simplified BSD License text as described in Section 4.e of
+
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 1]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   the Trust Legal Provisions and are provided without warranty as
+   described in the Simplified BSD License.
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . . .   2
+   2.  Goals . . . . . . . . . . . . . . . . . . . . . . . . . . . .   3
+   3.  Potential selection algorithms  . . . . . . . . . . . . . . .   4
+     3.1.  Client-based  . . . . . . . . . . . . . . . . . . . . . .   5
+     3.2.  Random  . . . . . . . . . . . . . . . . . . . . . . . . .   5
+     3.3.  Round-robin . . . . . . . . . . . . . . . . . . . . . . .   5
+     3.4.  Name-based  . . . . . . . . . . . . . . . . . . . . . . .   6
+     3.5.  Suffix-based  . . . . . . . . . . . . . . . . . . . . . .   6
+     3.6.  Early recommendations . . . . . . . . . . . . . . . . . .   6
+   4.  Further work  . . . . . . . . . . . . . . . . . . . . . . . .   7
+   5.  Acknowledgements  . . . . . . . . . . . . . . . . . . . . . .   7
+   6.  Informative References  . . . . . . . . . . . . . . . . . . .   7
+   Authors' Addresses  . . . . . . . . . . . . . . . . . . . . . . .   8
+
+1.  Introduction
+
+   Internet communications are increasingly protected, by use of
+   encryption [RFC8446], [RFC8484], [I-D.ietf-quic-transport],
+   [I-D.ietf-tls-esni].
+
+   When a DNS client [RFC1035] uses a resolver service, that service
+   learns what applications the user is using, what web sites are
+   visited, and so on.  Even with the protection of communications, DNS
+   resolvers themselves remain as a persistent vulnerability with
+   respect to privacy as it is aware of both the client and their usage
+   patterns.
+
+   Leaking this information to the Internet infrastructure component
+   such as a DNS resolver service can be problematic when the service is
+   not entirely trusted.  And even when the service is trusted and well
+   maintained, legal and commercial pressures or surveillance activity
+   may result in some of the information given to the service to be
+   misused, particularly when a service holds information for a large
+   number of users.  This is not desirable.
+
+   Defending against privacy leaks for DNS queries is particularly
+   important given the prevalence of pervasive surveillance efforts
+   [RFC7258].
+
+   This memo discusses the use of a set of different DNS resolvers to
+   reduce privacy problems related to DNS resolvers.  The architectural
+   principle followed here is one of attempting to avoid high-value
+   targets and the concentration of any individual users's information
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 2]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   in one place.  We outline a number of different strategies for
+   distributing queries to the different resolvers and analyze the
+   privacy and other impacts of those strategies.  Our observation is
+   that a simplistic models - such as a round-robin algorithm - are not
+   necessarily the best suited for this task.
+
+   The focus of this document is precisely only the choice of a resolver
+   from a known set.  There are many other worthwhile topics in the
+   general space of providing better confidentiality or privacy for DNS
+   queries, or for operating encrypted DNS query services.  Topics such
+   as resolver discovery, operational practices at any individial
+   resolver service, etc. are outside the scope of this memo.
+
+   The rest of this memo is organized as follows.  Section 2 specifies
+   the requirements that we would like such a distribution arrangement
+   to provide.  Section 3 discusses the different strategies, and makes
+   some early recommendations among the strategies.  Section 4 discusses
+   potential further work in this area.
+
+2.  Goals
+
+   There are many possible goals for building distributed services, with
+   the most typical one being the ability to scale to be able to serve
+   large number of clients.  This memo is not focused on this aspect,
+   but rather looks at distributing queries to different resolver
+   service providers to provide privacy benefits.
+
+   The background for looking at different service providers is that it
+   is unlikely that there are significant difference with regards to
+   privacy issues within the same provider, even if its servers are
+   distributed in different locations.  Any technical vulnerabilities or
+   commercial objectives apply throughout such networks anyway, and
+   government and surveillance activities seem to have extraterritorial
+   reach (see, e.g., [MSCVUS]).
+
+   As a result, the main privacy question is how to reduce information
+   learned by any individual resolver service provider through
+   distribution of queries from different clients.
+
+   Some of the basic goals that this distribution should achieve
+   include:
+
+   o  Not concentrating information from all clients to a single
+      resolver service.
+
+   o  Reducing the information given out regarding a single client to
+      any individual resolver service.
+
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 3]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   The latter goal can be broken further down to:
+
+   o  Avoiding sending queries about the same destination to different
+      services, as otherwise the result is worse than not doing any
+      distribution at all: all the different services will eventually
+      get the same information about a particular client.
+
+   o  Avoiding sending queries about related destinations
+      (*.example.com) to different services, as otherwise the different
+      services will likely conclude that the client is using the
+      "example.com" service anyway, regardless of the individual sub-
+      domains accessed on specific requests.
+
+   o  For browsers, avoiding sending queries about destinations on the
+      same page (https://example.com pulls an image from
+      https://anotherexample.com) to different servers.  This is because
+      there is a possibility of correlation that lets someone determine
+      that the user was on that page.
+
+   o  Otherwise, sending queries about different things to different
+      servers, to keep each server aware of minimal information about a
+      particular client.
+
+   Some of these goals depend on which component in a system is
+   performing the queries.  The web page goal above can only be done by
+   browsers, whereas the other rules could also be implemented in an OS-
+   based resolver client.
+
+   Note that there are also other possible goals, e.g., around discovery
+   of DNS servers (see, e.g.,
+   [I-D.schinazi-httpbis-doh-preference-hints]).  These goals are
+   outside the scope of this memo, as it is only concerned with
+   selection from a set of known servers.
+
+3.  Potential selection algorithms
+
+   This section introduces and analyzes several potential strategies for
+   distributing queries to different resolvers.  Each strategy is
+   formulated as an algorithm for choosing a resolver Ri from a set of n
+   resolvers R1, R2, ..., Rn.
+
+   Note that the list of algorithms may grow in a future version of this
+   memo; this set is the initially analyzed set.
+
+
+
+
+
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 4]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+3.1.  Client-based
+
+   The simplest algorithm is to distribute each different client to a
+   different resolver.  This reduces the number of users any particular
+   service will know about.  However, in order to function properly,
+   this methods needs to apply some kind of stable assignment mechanism,
+   e.g., a stable hash.
+
+   One way of doing this is to hash the client's identity in some
+   manner:
+
+   i = h(client identity) % n
+
+   Note that the client identity can (and should) be something that
+   remains private to the client itself; the resolver service need not
+   be told about the identity, even if the client's concept of its own
+   identity leads it to select a particular resolver service.  To avoid
+   disclosing DNS usage patterns to all resolvers, the identity needs to
+   be persistent information, perhaps obtained from the operating
+   system, user account, hardware, or a random value chosen upon the
+   first use of the application.
+
+   While this algorithm satisfies the first overall goal in Section 2,
+   it does nothing about splitting information regarding a particular
+   client to different services.  The only privacy benefit it provides
+   is that it reduces the number of clients that each resolver service
+   provider has information about.  This may discourage attacking that
+   service, or forcing the service to give out information.  But for
+   each individual client, there is still some resolver service that
+   knows everything about the user's DNS usage patterns.
+
+3.2.  Random
+
+   Another simple algorithm is a random selection:
+
+   i = rand() % n
+
+   This has the drawback of (over-time) providing information about all
+   clients to all services.  While this happens slowly, and does not
+   affect names that are not regularly visited, it still seems to be a
+   serious problem in this approach.
+
+3.3.  Round-robin
+
+   The clients can also choose to use a new resolver service either for
+   every query or upon client boot:
+
+   i = counter++ % n
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 5]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   This has largely the same downsides as the random algorithm.
+
+3.4.  Name-based
+
+   The clients may distribute their queries based on the name being
+   queried.  This results in different names going to different
+   services, e.g., a social network name goes to a different service
+   than a search engine name:
+
+   i = h(queried name) % n
+
+   This approach may also be extended to cover moving hosts by
+   incorporating the public IP address of the host, such that when the
+   host moves, the distribution changes.  For this to work the DNS query
+   protocol must not be fingerprintable.  Similarly, one may also
+   include the client id as in the Section 3.1 approach.  The full
+   equation for all of these is:
+
+   i = h(client identity|queried name|client public address) % n
+
+   When the hash function only takes into account the name and nothing
+   else, different clients will algorithmically arrive at the use of the
+   same resolver for the same names.  This can be undesirable.  When
+   address and identity information is used alongside the name, this is
+   no longer a problem.
+
+   Note that any hash-based distribution to a set of resolvers may or
+   may not distribute traffic to the resolvers equally.  For instance, a
+   popular domain may get a lot of queries, but is just one name from
+   the point of view of the hash.  Further work may be needed on this.
+
+3.5.  Suffix-based
+
+   A variant of the Section 3.4 approach is that one does not consider
+   the full name, but rather the main domain, i.e., example.com rather
+   than www.example.com.  To do this, one can use a public suffix list
+   that provides information about commonly used domain names.
+
+   The equation then becomes:
+
+   i = h(client identity|organization suffix of the queried name|
+         client public address) %  n
+
+3.6.  Early recommendations
+
+   The name- and suffix-based approaches seem to be more capable than
+   random- or round-robin -based approaches.
+
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 6]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+4.  Further work
+
+   TBD
+
+5.  Acknowledgements
+
+   The authors would like to thank Christian Huitema, Ari Keranen, Mark
+   Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuhlewind,
+   David Allan, Daniel Migault and many others for interesting
+   discussions in this problem space.
+
+6.  Informative References
+
+   [I-D.ietf-quic-transport]
+              Iyengar, J. and M. Thomson, "QUIC: A UDP-Based Multiplexed
+              and Secure Transport", draft-ietf-quic-transport-23 (work
+              in progress), September 2019.
+
+   [I-D.ietf-tls-esni]
+              Rescorla, E., Oku, K., Sullivan, N., and C. Wood,
+              "Encrypted Server Name Indication for TLS 1.3", draft-
+              ietf-tls-esni-04 (work in progress), July 2019.
+
+   [I-D.schinazi-httpbis-doh-preference-hints]
+              Schinazi, D., Sullivan, N., and J. Kipp, "DoH Preference
+              Hints for HTTP", draft-schinazi-httpbis-doh-preference-
+              hints-00 (work in progress), July 2019.
+
+   [MSCVUS]   Wikipedia, ., "Microsoft Corp. v. United States",
+              https://en.wikipedia.org/wiki/
+              Microsoft_Corp._v._United_States , n.d..
+
+   [RFC1035]  Mockapetris, P., "Domain names - implementation and
+              specification", STD 13, RFC 1035, DOI 10.17487/RFC1035,
+              November 1987, <https://www.rfc-editor.org/info/rfc1035>.
+
+   [RFC7258]  Farrell, S. and H. Tschofenig, "Pervasive Monitoring Is an
+              Attack", BCP 188, RFC 7258, DOI 10.17487/RFC7258, May
+              2014, <https://www.rfc-editor.org/info/rfc7258>.
+
+   [RFC8446]  Rescorla, E., "The Transport Layer Security (TLS) Protocol
+              Version 1.3", RFC 8446, DOI 10.17487/RFC8446, August 2018,
+              <https://www.rfc-editor.org/info/rfc8446>.
+
+   [RFC8484]  Hoffman, P. and P. McManus, "DNS Queries over HTTPS
+              (DoH)", RFC 8484, DOI 10.17487/RFC8484, October 2018,
+              <https://www.rfc-editor.org/info/rfc8484>.
+
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 7]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+Authors' Addresses
+
+   Jari Arkko
+   Ericsson
+
+   Email: jari.arkko@piuha.net
+
+
+   Martin Thomson
+   Mozilla
+
+   Email: martin.thomson@gmail.com
+
+
+   Ted Hardie
+   Google
+
+   Email: ted.ietf@gmail.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Arkko, et al.            Expires April 16, 2020                 [Page 8]
