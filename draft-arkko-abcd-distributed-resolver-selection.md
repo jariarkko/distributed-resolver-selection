@@ -89,40 +89,47 @@ In this design clients select and consistently use the same resolver.  This migh
 
 For the purposes of this determination, a client might be an entire device, with the selection being made at the operating system level, or it could be a selection made by individual applications.  In the extreme, an individual application might be able to partition its activities in a way that allows it to direct queries to multiple resolvers.
 
+### Analysis of client-based selection
+
 Where different applications make independent resolver selections, activities that involve multiple applications can result in information about those activities being exposed to multiple resolvers.  For instance, an application could open another application for the purposes of handling a specific file type or to load a URL.  This could expose queries related to the activity as a whole to multiple resolvers.
 
 Even making different selections at the level of a device can result in replicating related information to multiple resolvers.  For instance, an individual who uses a particular application on multiple devices might perform similar activities on those devices, but have DNS queries distributed to different resolvers.
 
 While this algorithm provides distribution of DNS queries in the aggregate, it does little to divide information about a particular client between resolvers. It effectively only reduces the number of clients that each resolver can acquire information about. This provides systemic benefit, but does not provide individual clients with any significant advantage as there is still some resolver service that has a complete view of the user's DNS usage patterns.
 
+### Enhancements to client-based selection {#discontinuous}
+
+Clients can break continuity of records by occasionally resetting state so that a different resolver is selected.  A client might choose to do this when it shuts down, or when it moves to a new network location.
+
+Breaking continuity is less effective if any state, in particular cached results, is retained across the change.  If activities that depend on DNS querying are continued across the change then it might be possible for the old resolver to make inferences about the activity on the new resolver, or the new resolver to make similar guesses about past activity.  As many modern applications provide session continuity features across shutdowns and crashes, this can mean that finding an appropriate point in time to perform a switch.
+
 ## Name-based {#namebased}
 
-The clients might distribute their queries based on the name being queried. This results in different names going to different services, e.g., a social network name goes to a different service than a search engine name:
+Clients might also additionally attempt to distribute queries based on the name being queried.  This results in different names going to different resolvers.
+
+A naïve algorithm for name distribution uses the target name as input to a fixed hash:
 
     i = h(queried name) % n
 
-This approach may also be extended to cover moving hosts by incorporating the public IP address of the host, such that when the host moves, the distribution changes. For this to work the DNS query protocol must not be fingerprintable. Similarly, one may also include the client id as in the {{clientbased}} approach. The full equation for all of these is:
+However, this simplistic approach fails to prevent related queries from being distributed to different resolvers in several ways.  For instance, queries that are executed after receiving a CNAME record in a response will leak the same information as the original query that resulted in the CNAME record.  Services that use related domain names -- such as where "example.com" uses "static.example.com" or "cdn.example" -- might reveal the use of the combined service to a resolver that receives a query for any associated name.  In both cases, sensitive information is effectively replicated across multiple resolvers.
 
-    i = h(client identity|queried name|client public address) % n
+### Name reduction
 
-When the hash function only takes into account the name and nothing else, different clients will algorithmically arrive at the use of the same resolver for the same names. This can be undesirable. When address and identity information is used alongside the name, this is no longer a problem.
+In order to reduce the effect of distributing similar names to different servers, a grouping mechanism might be used.  Leading labels in names might be erased before being input to the hashing algorithm.  This requires that the part of the suffix that is shared between different services can be identified.  For the purposes of ensuring that queries are consistently routed to the same resolver, a weak signal is likely sufficient.
 
-Note that any hash-based distribution to a set of resolvers may or may not distribute traffic to the resolvers equally. For instance, a popular domain may get a lot of queries, but is just one name from the point of view of the hash. Further work may be needed on this.
+Several options for grouping domain names into equivalence sets might be used:
 
-Mention public suffix, and also the equivalence lists that Mozilla uses: https://github.com/mozilla-services/shavar-prod-lists/blob/master/disconnect-entitylist.json  And then talk about first party sets: https://github.com/krgovind/first-party-sets
+* The [public suffix list](https://publicsuffix.org/) provides a manually curated list of shared domain suffixes.  Names can be reduced to include one label more than the list allows, referred to as effective top-level domain plus one (eTLD+1).  This reduces the number of cases where queries for domains under the same administrative control are sent to different resolvers.
 
-## Suffix-based
+* Services often relies on multiple domain names across different eTLD+1 domains.  Developing equivalence sets might be needed to avoid broadcasting queries to servers.  Mozilla maintains a manually curated [equivalence list](https://github.com/mozilla-services/shavar-prod-lists/blob/master/disconnect-entitylist.json) for web sites that aims to maps the complete set of unrelated names used by services to a single service name.
 
-A variant of the {{namebased}} approach is that one does not consider the full name, but rather the main domain, i.e., example.com rather than www.example.com. To do this, one can use a public suffix list that provides information about commonly used domain names.
+* Other technologies, such as the proposed [first party sets](https://github.com/krgovind/first-party-sets) or the abandoned DBOUND {{?DBOUND=I-D.levine-dbound-dns}} provide domain owners a means to declare some form of equivalence for different names.
 
-The equation then becomes:
+Each of these techniques are potentially unreliable in different ways.  Additionally, these could skew the distribution of queries in ways that might concentrate information on particular resolvers.
 
-    i = h(client identity|organization suffix of the queried name|
-          client public address) %  n
+# Effects of query distribution
 
-## Early recommendations
-
-The name- and suffix-based approaches seem to be more capable than random- or round-robin -based approaches.
+Choosing to use more than one DNS resolver has broader implications than just the effect on privacy.
 
 ## Caching considerations {#caching}
 
@@ -134,32 +141,30 @@ Making the same query to multiple resolvers can result in different answers.  Fo
 
 In the extreme, an application might encounter errors as a result of receiving incompatible answers, particularly if a server operator (incorrectly) assumes that different DNS queries for the same client always originate from the same source address.  This is most likely to occur if name-based selection is used, as queries could be related based on information that the client does not consider.
 
+## Resolver load distribution
+
+Any selection of resolvers that is based on random inputs will need to account for available capacity on resolvers.  Otherwise, resolvers with less available query-processing capacity will receive too high a proportion of all queries.  Clients only need to be informed of relative available capacity in order to make an appropriate selection.  How relative capacities of resolvers are determined is not in scope for this document.
+
+# Poor distribution algorithms {#bad-algorithms}
+
+Random allocation to a resolver might be implemented:
+
+    i = rand() % n
+
+Similar drawbacks can be seen where clients iterate over available resolvers:
+
+    i = counter++ % n
+
+Whether this choice is made on a per-query basis, these two methods eventually provide information about all queries to all resolvers over time.  Domain names are often queried many times over long periods, so queries for the same domain name will eventually be distributed to all resolvers.  Only one-off queries will avoid being distributed.
+
+Implementing either method at a much slower cadence might be effective, subject to the constraints in {{discontinuous}}.  This only slows the distribution of information about repeated queries to all resolvers.
+
 # Further work {#furtherwork}
 
 TBD
 
+--- back
+
 # Acknowledgements {#ack}
 
 The authors would like to thank Christian Huitema, Ari Keränen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kühlewind, David Allan, Daniel Migault and many others for interesting discussions in this problem space.
-
---- back
-
-# Poor distribution algorithms {#bad-algorithms}
-
-This appendix examines some of the drawbacks of simple distribution schemes.
-
-## Random
-
-A per-query random allocation to a resolver might be implemented:
-
-    i = rand() % n
-
-This has the drawback of providing information about all clients to all services over time. While this happens slowly, and does not affect names that are not regularly visited, it still seems to be a serious problem in this approach.
-
-## Round-robin
-
-The clients can also choose to use a new resolver service either for every query or upon client boot:
-
-    i = counter++ % n
-
-This has largely the same downsides as the random algorithm.
