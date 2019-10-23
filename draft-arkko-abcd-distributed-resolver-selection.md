@@ -76,8 +76,6 @@ Note that there are also other possible goals, e.g., around discovery of DNS ser
 
 This section introduces and analyzes several potential strategies for distributing queries to different resolvers. Each strategy is formulated as an algorithm for choosing a resolver Ri from a set of n resolvers R1, R2, ...,  Rn.
 
-Note that the list of algorithms may grow in a future version of this memo; this set is the initially analyzed set.
-
 The designs presented in {{algorithms}} assume that the stub resolver performing distribution of queries has varying degrees of contextual information.  In general, more contextual information allows for finer-grained distribution of information between resolvers.
 
 
