@@ -87,7 +87,7 @@ In this design clients select and consistently use the same resolver.  This migh
 
     i = h(client identity) % n
 
-For the purposes of this determination, a client might be an entire device, with the selection being made at the operating system level, or it could be a selection made by individual applications.
+For the purposes of this determination, a client might be an entire device, with the selection being made at the operating system level, or it could be a selection made by individual applications.  In the extreme, an individual application might be able to partition its activities in a way that allows it to direct queries to multiple resolvers.
 
 Where different applications make independent resolver selections, activities that involve multiple applications can result in information about those activities being exposed to multiple resolvers.  For instance, an application could open another application for the purposes of handling a specific file type or to load a URL.  This could expose queries related to the activity as a whole to multiple resolvers.
 
@@ -97,7 +97,7 @@ While this algorithm provides distribution of DNS queries in the aggregate, it d
 
 ## Name-based {#namebased}
 
-The clients may distribute their queries based on the name being queried. This results in different names going to different services, e.g., a social network name goes to a different service than a search engine name:
+The clients might distribute their queries based on the name being queried. This results in different names going to different services, e.g., a social network name goes to a different service than a search engine name:
 
     i = h(queried name) % n
 
@@ -108,6 +108,8 @@ This approach may also be extended to cover moving hosts by incorporating the pu
 When the hash function only takes into account the name and nothing else, different clients will algorithmically arrive at the use of the same resolver for the same names. This can be undesirable. When address and identity information is used alongside the name, this is no longer a problem.
 
 Note that any hash-based distribution to a set of resolvers may or may not distribute traffic to the resolvers equally. For instance, a popular domain may get a lot of queries, but is just one name from the point of view of the hash. Further work may be needed on this.
+
+Mention public suffix, and also the equivalence lists that Mozilla uses: https://github.com/mozilla-services/shavar-prod-lists/blob/master/disconnect-entitylist.json
 
 ## Suffix-based
 
@@ -121,6 +123,16 @@ The equation then becomes:
 ## Early recommendations
 
 The name- and suffix-based approaches seem to be more capable than random- or round-robin -based approaches.
+
+## Caching considerations {#caching}
+
+Using a common cache for multiple resolvers introduces the possibility that a resolver could learn about queries that were originally directed to another resolvers by observing the absence of queries.  Though this can reduce caching performance, clients can address this by having a per-resolver cache and only using the cache for the selected resolver.
+
+## Consistency considerations
+
+Making the same query to multiple resolvers can result in different answers.  For instance, DNS-based load balancing can lead to different answers being produced over time or for different query origins.
+
+In the extreme, an application might encounter errors as a result of receiving incompatible answers, particularly if a server operator (incorrectly) assumes that different DNS queries for the same client always originate from the same source address.  This is most likely to occur if name-based selection is used, as queries could be related based on information that the client does not consider.
 
 # Further work {#furtherwork}
 
