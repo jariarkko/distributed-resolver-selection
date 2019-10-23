@@ -81,15 +81,19 @@ The designs presented in {{algorithms}} assume that the stub resolver performing
 
 ## Client-based {#clientbased}
 
-The simplest algorithm is to distribute each different client to a different resolver. This reduces the number of users any particular service will know about. However, in order to function properly, this methods needs to apply some kind of stable assignment mechanism, e.g., a stable hash.
+The simplest algorithm is to distribute each different client to a different resolver. This reduces the number of users any particular service will know about.  However, this does little to protect an individual user from the aggregation of information about queries at the selected resolver.
 
-One way of doing this is to hash the client's identity in some manner:
+In this design clients select and consistently use the same resolver.  This might be achieved by randomly selecting and remembering a resolver.  Alternatively, a resolver might be selected using consistent hashing that takes some conception of client identity as input:
 
     i = h(client identity) % n
 
-Note that the client identity can (and should) be something that remains private to the client itself; the resolver service need not be told about the identity, even if the client's concept of its own identity leads it to select a particular resolver service. To avoid disclosing DNS usage patterns to all resolvers, the identity needs to be persistent information, perhaps obtained from the operating system, user account, hardware, or a random value chosen upon the first use of the application.
+For the purposes of this determination, a client might be an entire device, with the selection being made at the operating system level, or it could be a selection made by individual applications.
 
-While this algorithm satisfies the first overall goal in {{goals}}, it does nothing about splitting information regarding a particular client to different services. The only privacy benefit it provides is that it reduces the number of clients that each resolver service provider has information about. This may discourage attacking that service, or forcing the service to give out information. But for each individual client, there is still some resolver service that knows everything about the user's DNS usage patterns.
+Where different applications make independent resolver selections, activities that involve multiple applications can result in information about those activities being exposed to multiple resolvers.  For instance, an application could open another application for the purposes of handling a specific file type or to load a URL.  This could expose queries related to the activity as a whole to multiple resolvers.
+
+Even making different selections at the level of a device can result in replicating related information to multiple resolvers.  For instance, an individual who uses a particular application on multiple devices might perform similar activities on those devices, but have DNS queries distributed to different resolvers.
+
+While this algorithm provides distribution of DNS queries in the aggregate, it does little to divide information about a particular client between resolvers. It effectively only reduces the number of clients that each resolver can acquire information about. This provides systemic benefit, but does not provide individual clients with any significant advantage as there is still some resolver service that has a complete view of the user's DNS usage patterns.
 
 ## Name-based {#namebased}
 
