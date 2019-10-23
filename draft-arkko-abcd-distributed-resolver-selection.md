@@ -109,7 +109,7 @@ When the hash function only takes into account the name and nothing else, differ
 
 Note that any hash-based distribution to a set of resolvers may or may not distribute traffic to the resolvers equally. For instance, a popular domain may get a lot of queries, but is just one name from the point of view of the hash. Further work may be needed on this.
 
-Mention public suffix, and also the equivalence lists that Mozilla uses: https://github.com/mozilla-services/shavar-prod-lists/blob/master/disconnect-entitylist.json
+Mention public suffix, and also the equivalence lists that Mozilla uses: https://github.com/mozilla-services/shavar-prod-lists/blob/master/disconnect-entitylist.json  And then talk about first party sets: https://github.com/krgovind/first-party-sets
 
 ## Suffix-based
 
