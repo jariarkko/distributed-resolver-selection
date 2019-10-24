@@ -68,7 +68,13 @@ For instance, some web sites use names that are appear unrelated to their primar
 
 A distribution scheme also needs to consider stability of query routing over time.  A resolver can observve the absence of queries and infer things about the state of a client cache, which can reveal that queries were made to other resolvers.
 
-The need to limit replication of private information about queries eliminates simplistic distribution schemes, such as those discussed in {{bad-algorithms}}.
+In effect, there are two goals in tension:
+
+* to split queries between as many different resolvers as possible; and
+
+* to reduce the spread of information about related queries across multiple resolvers.
+
+The need to limit replication of private information about queries eliminates simplistic distribution schemes, such as those discussed in {{bad-algorithms}}.  The designs described in {{algorithms}} all attempt to balance these different goals using different properties from the context of a query ({{clientbased}}) or the query name itself ({{namebased}}).
 
 Note that there are also other possible goals, e.g., around discovery of DNS servers (see, e.g., {{I-D.schinazi-httpbis-doh-preference-hints}}). These goals are outside the scope of this memo, as it is only concerned with selection from a set of known servers.
 
@@ -77,7 +83,6 @@ Note that there are also other possible goals, e.g., around discovery of DNS ser
 This section introduces and analyzes several potential strategies for distributing queries to different resolvers. Each strategy is formulated as an algorithm for choosing a resolver Ri from a set of n resolvers R1, R2, ...,  Rn.
 
 The designs presented in {{algorithms}} assume that the stub resolver performing distribution of queries has varying degrees of contextual information.  In general, more contextual information allows for finer-grained distribution of information between resolvers.
-
 
 ## Client-based {#clientbased}
 
@@ -129,7 +134,7 @@ Each of these techniques are potentially unreliable in different ways.  Addition
 
 # Effects of query distribution
 
-Choosing to use more than one DNS resolver has broader implications than just the effect on privacy.
+Choosing to use more than one DNS resolver has broader implications than just the effect on privacy.  Using multiple resolvers is a significant change from the assumed model where stub resolvers send all queries to a single resolver.
 
 ## Caching considerations {#caching}
 
@@ -137,13 +142,17 @@ Using a common cache for multiple resolvers introduces the possibility that a re
 
 ## Consistency considerations
 
-Making the same query to multiple resolvers can result in different answers.  For instance, DNS-based load balancing can lead to different answers being produced over time or for different query origins.
+Making the same query to multiple resolvers can result in different answers.  For instance, DNS-based load balancing can lead to different answers being produced over time or for different query origins.  Or, different resolvers might have different policies with respect to blocking or filtering of queries that lead to clients receiving inconsistent answers.
 
 In the extreme, an application might encounter errors as a result of receiving incompatible answers, particularly if a server operator (incorrectly) assumes that different DNS queries for the same client always originate from the same source address.  This is most likely to occur if name-based selection is used, as queries could be related based on information that the client does not consider.
 
 ## Resolver load distribution
 
 Any selection of resolvers that is based on random inputs will need to account for available capacity on resolvers.  Otherwise, resolvers with less available query-processing capacity will receive too high a proportion of all queries.  Clients only need to be informed of relative available capacity in order to make an appropriate selection.  How relative capacities of resolvers are determined is not in scope for this document.
+
+## Query performance
+
+Distribution of queries between resolvers also means that clients are exposed to greater variations in performance.
 
 # Poor distribution algorithms {#bad-algorithms}
 
@@ -161,7 +170,8 @@ Implementing either method at a much slower cadence might be effective, subject 
 
 # Further work {#furtherwork}
 
-TBD
+More work is needed to determine factors other than privacy that could motivate having queries routed to the same resolver.
+
 
 --- back
 
