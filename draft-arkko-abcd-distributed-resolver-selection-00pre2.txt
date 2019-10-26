@@ -1,0 +1,560 @@
+
+
+
+
+Network Working Group                                           J. Arkko
+Internet-Draft                                                  Ericsson
+Intended status: Informational                                M. Thomson
+Expires: April 28, 2020                                          Mozilla
+                                                               T. Hardie
+                                                                  Google
+                                                        October 26, 2019
+
+
+      Selecting Resolvers from a Set of Distributed DNS Resolvers
+            draft-arkko-abcd-distributed-resolver-selection
+
+Abstract
+
+   This memo discusses the use of a set of different DNS resolvers to
+   reduce privacy problems related to resolvers learning the Internet
+   usage patterns of their clients.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on April 28, 2020.
+
+Copyright Notice
+
+   Copyright (c) 2019 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents
+   (https://trustee.ietf.org/license-info) in effect on the date of
+   publication of this document.  Please review these documents
+   carefully, as they describe your rights and restrictions with respect
+   to this document.  Code Components extracted from this document must
+   include Simplified BSD License text as described in Section 4.e of
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 1]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   the Trust Legal Provisions and are provided without warranty as
+   described in the Simplified BSD License.
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . . .   2
+   2.  Goals and Constraints . . . . . . . . . . . . . . . . . . . .   3
+   3.  Query distribution algorithms . . . . . . . . . . . . . . . .   4
+     3.1.  Client-based  . . . . . . . . . . . . . . . . . . . . . .   5
+       3.1.1.  Analysis of client-based selection  . . . . . . . . .   5
+       3.1.2.  Enhancements to client-based selection  . . . . . . .   6
+     3.2.  Name-based  . . . . . . . . . . . . . . . . . . . . . . .   6
+       3.2.1.  Name reduction  . . . . . . . . . . . . . . . . . . .   6
+   4.  Effects of query distribution . . . . . . . . . . . . . . . .   7
+     4.1.  Caching considerations  . . . . . . . . . . . . . . . . .   7
+     4.2.  Consistency considerations  . . . . . . . . . . . . . . .   7
+     4.3.  Resolver load distribution  . . . . . . . . . . . . . . .   8
+     4.4.  Query performance . . . . . . . . . . . . . . . . . . . .   8
+   5.  Poor distribution algorithms  . . . . . . . . . . . . . . . .   8
+   6.  Further work  . . . . . . . . . . . . . . . . . . . . . . . .   9
+   7.  References  . . . . . . . . . . . . . . . . . . . . . . . . .   9
+     7.1.  Normative References  . . . . . . . . . . . . . . . . . .   9
+     7.2.  Informative References  . . . . . . . . . . . . . . . . .   9
+     7.3.  URIs  . . . . . . . . . . . . . . . . . . . . . . . . . .   9
+   Appendix A.  Acknowledgements . . . . . . . . . . . . . . . . . .  10
+   Authors' Addresses  . . . . . . . . . . . . . . . . . . . . . . .  10
+
+1.  Introduction
+
+   The DNS protocol [DNS] provides no confidentiality; and therefore no
+   privacy protections for queries.  Encryption of DNS transport between
+   stub and recursive resolvers as defined in [DOT] and [DOH] provides
+   confidentiality for DNS queries between a stub and a recursive
+   resolver.
+
+   Recursive resolvers present a privacy dichotomy for clients.  A
+   recursive resolver that aggregates queries from multiple clients
+   provides a measure of anonymity for those clients, both for
+   authoritative servers and from other observers on the network.
+   Aggregating requests from multiple clients makes it difficult for
+   these entities to correlate queries with specific clients.  The
+   potential for a recursive to answer queries from cache further
+   improves this privacy advantage, while providing significant query
+   latency gains.  However, because the recursive resolver sees and can
+   record DNS queries, using a recursive resolver creates a privacy
+   exposure for clients.
+
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 2]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   A client might decide to trust a particular recursive resolver with
+   information about DNS queries.  However, it is difficult or
+   impossible to provide any guarantees about data handling practices in
+   the general case.  And even if a service can be trusted to respect
+   privacy with respect to handling of query data, legal and commercial
+   pressures or surveillance activity could result misuse of data.
+   Similarly, it is not possible to make any guarantees about attacks on
+   services.  For a service with many clients, these risks are
+   particularly undesirable.
+
+   This memo describes techniques for distributing DNS queries between
+   multiple recursive resolvers from a known set.  The goal is to reduce
+   the amount of information that any signal DNS resolver is able to
+   gain and thereby reduce the amount of privacy-sensitive information
+   that can be collected in one place.  The characteristics of different
+   choices are examined.
+
+   An important outcome of this analysis is that simplistic methods for
+   distributing queries - such as a round-robin algorithm - have
+   considerably worse privacy characteristics than using a single
+   recursive resolver.
+
+   The rest of this memo is organized as follows.  Section 2 specifies
+   the requirements that we would like such a distribution arrangement
+   to provide.  Section 3 discusses the different strategies, and makes
+   some early recommendations among the strategies.  Section 6 discusses
+   potential further work in this area.
+
+2.  Goals and Constraints
+
+   This document aims to reduce the concentration of information about
+   client activity by distributing DNS queries across different resolver
+   services, for all DNS queries in the aggregate and for DNS queries
+   made by individual clients.  By distributing queries in this way, the
+   goal is to reduce the amount of information that any given DNS
+   resolver service can acquire about client activity.
+
+   Any method for distributing queries from a single client needs to
+   consider the risk of increasing the total amount of private
+   information that is exposed by distributing queries - and associated
+   information - to multiple DNS resolvers.  In the extreme, any design
+   that results in replicating the same query toward multiple services
+   would be a net privacy loss.  More subtle leaks arise as a result of
+   distributing queries for sub-domains and even domains that are
+   superficially unrelated, because these could share a commonality that
+   might be exploited to link them.
+
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 3]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   For instance, some web sites use names that are appear unrelated to
+   their primary name for hosting some kinds of content, like static
+   images or videos.  If queries for these unrelated names were sent to
+   different services, that effectively allows multiple resolvers to
+   learn that the client accessed the web site.
+
+   A distribution scheme also needs to consider stability of query
+   routing over time.  A resolver can observve the absence of queries
+   and infer things about the state of a client cache, which can reveal
+   that queries were made to other resolvers.
+
+   In effect, there are two goals in tension:
+
+   o  to split queries between as many different resolvers as possible;
+      and
+
+   o  to reduce the spread of information about related queries across
+      multiple resolvers.
+
+   The need to limit replication of private information about queries
+   eliminates simplistic distribution schemes, such as those discussed
+   in Section 5.  The designs described in Section 3 all attempt to
+   balance these different goals using different properties from the
+   context of a query (Section 3.1) or the query name itself
+   (Section 3.2).
+
+   Note that there are also other possible goals, e.g., around discovery
+   of DNS servers (see, e.g.,
+   [I-D.schinazi-httpbis-doh-preference-hints]).  These goals are
+   outside the scope of this memo, as it is only concerned with
+   selection from a set of known servers.
+
+3.  Query distribution algorithms
+
+   This section introduces and analyzes several potential strategies for
+   distributing queries to different resolvers.  Each strategy is
+   formulated as an algorithm for choosing a resolver Ri from a set of n
+   resolvers R1, R2, ..., Rn.
+
+   The designs presented in Section 3 assume that the stub resolver
+   performing distribution of queries has varying degrees of contextual
+   information.  In general, more contextual information allows for
+   finer-grained distribution of information between resolvers.
+
+
+
+
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 4]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+3.1.  Client-based
+
+   The simplest algorithm is to distribute each different client to a
+   different resolver.  This reduces the number of users any particular
+   service will know about.  However, this does little to protect an
+   individual user from the aggregation of information about queries at
+   the selected resolver.
+
+   In this design clients select and consistently use the same resolver.
+   This might be achieved by randomly selecting and remembering a
+   resolver.  Alternatively, a resolver might be selected using
+   consistent hashing that takes some conception of client identity as
+   input:
+
+   i = h(client identity) % n
+
+   For the purposes of this determination, a client might be an entire
+   device, with the selection being made at the operating system level,
+   or it could be a selection made by individual applications.  In the
+   extreme, an individual application might be able to partition its
+   activities in a way that allows it to direct queries to multiple
+   resolvers.
+
+3.1.1.  Analysis of client-based selection
+
+   Where different applications make independent resolver selections,
+   activities that involve multiple applications can result in
+   information about those activities being exposed to multiple
+   resolvers.  For instance, an application could open another
+   application for the purposes of handling a specific file type or to
+   load a URL.  This could expose queries related to the activity as a
+   whole to multiple resolvers.
+
+   Even making different selections at the level of a device can result
+   in replicating related information to multiple resolvers.  For
+   instance, an individual who uses a particular application on multiple
+   devices might perform similar activities on those devices, but have
+   DNS queries distributed to different resolvers.
+
+   While this algorithm provides distribution of DNS queries in the
+   aggregate, it does little to divide information about a particular
+   client between resolvers.  It effectively only reduces the number of
+   clients that each resolver can acquire information about.  This
+   provides systemic benefit, but does not provide individual clients
+   with any significant advantage as there is still some resolver
+   service that has a complete view of the user's DNS usage patterns.
+
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 5]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+3.1.2.  Enhancements to client-based selection
+
+   Clients can break continuity of records by occasionally resetting
+   state so that a different resolver is selected.  A client might
+   choose to do this when it shuts down, or when it moves to a new
+   network location.
+
+   Breaking continuity is less effective if any state, in particular
+   cached results, is retained across the change.  If activities that
+   depend on DNS querying are continued across the change then it might
+   be possible for the old resolver to make inferences about the
+   activity on the new resolver, or the new resolver to make similar
+   guesses about past activity.  As many modern applications provide
+   session continuity features across shutdowns and crashes, this can
+   mean that finding an appropriate point in time to perform a switch.
+
+3.2.  Name-based
+
+   Clients might also additionally attempt to distribute queries based
+   on the name being queried.  This results in different names going to
+   different resolvers.
+
+   A naive algorithm for name distribution uses the target name as input
+   to a fixed hash:
+
+   i = h(queried name) % n
+
+   However, this simplistic approach fails to prevent related queries
+   from being distributed to different resolvers in several ways.  For
+   instance, queries that are executed after receiving a CNAME record in
+   a response will leak the same information as the original query that
+   resulted in the CNAME record.  Services that use related domain names
+   - such as where "example.com" uses "static.example.com" or
+   "cdn.example" - might reveal the use of the combined service to a
+   resolver that receives a query for any associated name.  In both
+   cases, sensitive information is effectively replicated across
+   multiple resolvers.
+
+3.2.1.  Name reduction
+
+   In order to reduce the effect of distributing similar names to
+   different servers, a grouping mechanism might be used.  Leading
+   labels in names might be erased before being input to the hashing
+   algorithm.  This requires that the part of the suffix that is shared
+   between different services can be identified.  For the purposes of
+   ensuring that queries are consistently routed to the same resolver, a
+   weak signal is likely sufficient.
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 6]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   Several options for grouping domain names into equivalence sets might
+   be used:
+
+   o  The public suffix list [1] provides a manually curated list of
+      shared domain suffixes.  Names can be reduced to include one label
+      more than the list allows, referred to as effective top-level
+      domain plus one (eTLD+1).  This reduces the number of cases where
+      queries for domains under the same administrative control are sent
+      to different resolvers.
+
+   o  Services often relies on multiple domain names across different
+      eTLD+1 domains.  Developing equivalence sets might be needed to
+      avoid broadcasting queries to servers.  Mozilla maintains a
+      manually curated equivalence list [2] for web sites that aims to
+      maps the complete set of unrelated names used by services to a
+      single service name.
+
+   o  Other technologies, such as the proposed first party sets [3] or
+      the abandoned DBOUND [DBOUND] provide domain owners a means to
+      declare some form of equivalence for different names.
+
+   Each of these techniques are potentially unreliable in different
+   ways.  Additionally, these could skew the distribution of queries in
+   ways that might concentrate information on particular resolvers.
+
+4.  Effects of query distribution
+
+   Choosing to use more than one DNS resolver has broader implications
+   than just the effect on privacy.  Using multiple resolvers is a
+   significant change from the assumed model where stub resolvers send
+   all queries to a single resolver.
+
+4.1.  Caching considerations
+
+   Using a common cache for multiple resolvers introduces the
+   possibility that a resolver could learn about queries that were
+   originally directed to another resolvers by observing the absence of
+   queries.  Though this can reduce caching performance, clients can
+   address this by having a per-resolver cache and only using the cache
+   for the selected resolver.
+
+4.2.  Consistency considerations
+
+   Making the same query to multiple resolvers can result in different
+   answers.  For instance, DNS-based load balancing can lead to
+   different answers being produced over time or for different query
+   origins.  Or, different resolvers might have different policies with
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 7]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+   respect to blocking or filtering of queries that lead to clients
+   receiving inconsistent answers.
+
+   In the extreme, an application might encounter errors as a result of
+   receiving incompatible answers, particularly if a server operator
+   (incorrectly) assumes that different DNS queries for the same client
+   always originate from the same source address.  This is most likely
+   to occur if name-based selection is used, as queries could be related
+   based on information that the client does not consider.
+
+4.3.  Resolver load distribution
+
+   Any selection of resolvers that is based on random inputs will need
+   to account for available capacity on resolvers.  Otherwise, resolvers
+   with less available query-processing capacity will receive too high a
+   proportion of all queries.  Clients only need to be informed of
+   relative available capacity in order to make an appropriate
+   selection.  How relative capacities of resolvers are determined is
+   not in scope for this document.
+
+4.4.  Query performance
+
+   Distribution of queries between resolvers also means that clients are
+   exposed to greater variations in performance.
+
+5.  Poor distribution algorithms
+
+   Random allocation to a resolver might be implemented:
+
+   i = rand() % n
+
+   Similar drawbacks can be seen where clients iterate over available
+   resolvers:
+
+   i = counter++ % n
+
+   Whether this choice is made on a per-query basis, these two methods
+   eventually provide information about all queries to all resolvers
+   over time.  Domain names are often queried many times over long
+   periods, so queries for the same domain name will eventually be
+   distributed to all resolvers.  Only one-off queries will avoid being
+   distributed.
+
+   Implementing either method at a much slower cadence might be
+   effective, subject to the constraints in Section 3.1.2.  This only
+   slows the distribution of information about repeated queries to all
+   resolvers.
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 8]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+6.  Further work
+
+   More work is needed to determine factors other than privacy that
+   could motivate having queries routed to the same resolver.
+
+7.  References
+
+7.1.  Normative References
+
+   [DNS]      Mockapetris, P., "Domain names - implementation and
+              specification", STD 13, RFC 1035, DOI 10.17487/RFC1035,
+              November 1987, <https://www.rfc-editor.org/info/rfc1035>.
+
+   [DOH]      Hoffman, P. and P. McManus, "DNS Queries over HTTPS
+              (DoH)", RFC 8484, DOI 10.17487/RFC8484, October 2018,
+              <https://www.rfc-editor.org/info/rfc8484>.
+
+   [DOT]      Hu, Z., Zhu, L., Heidemann, J., Mankin, A., Wessels, D.,
+              and P. Hoffman, "Specification for DNS over Transport
+              Layer Security (TLS)", RFC 7858, DOI 10.17487/RFC7858, May
+              2016, <https://www.rfc-editor.org/info/rfc7858>.
+
+7.2.  Informative References
+
+   [DBOUND]   Levine, J., "Publishing Organization Boundaries in the
+              DNS", draft-levine-dbound-dns-03 (work in progress), April
+              2019.
+
+   [I-D.schinazi-httpbis-doh-preference-hints]
+              Schinazi, D., Sullivan, N., and J. Kipp, "DoH Preference
+              Hints for HTTP", draft-schinazi-httpbis-doh-preference-
+              hints-00 (work in progress), July 2019.
+
+   [MSCVUS]   Wikipedia, ., "Microsoft Corp. v. United States",
+              https://en.wikipedia.org/wiki/
+              Microsoft_Corp._v._United_States , n.d..
+
+7.3.  URIs
+
+   [1] https://publicsuffix.org/
+
+   [2] https://github.com/mozilla-services/shavar-prod-
+       lists/blob/master/disconnect-entitylist.json
+
+   [3] https://github.com/krgovind/first-party-sets
+
+
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                 [Page 9]
+
+Internet-Draft       Distributed Resolver Selection         October 2019
+
+
+Appendix A.  Acknowledgements
+
+   The authors would like to thank Christian Huitema, Ari Keraenen, Mark
+   Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuehlewind,
+   David Allan, Daniel Migault and many others for interesting
+   discussions in this problem space.
+
+Authors' Addresses
+
+   Jari Arkko
+   Ericsson
+
+   Email: jari.arkko@piuha.net
+
+
+   Martin Thomson
+   Mozilla
+
+   Email: martin.thomson@gmail.com
+
+
+   Ted Hardie
+   Google
+
+   Email: ted.ietf@gmail.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Arkko, et al.            Expires April 28, 2020                [Page 10]
