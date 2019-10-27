@@ -31,12 +31,6 @@ author:
 normative:
 
 informative:
-  RFC1035: 
-  RFC7258: 
-  RFC8446:
-  RFC8484:
-  I-D.ietf-tls-esni:
-  I-D.ietf-quic-transport:
   I-D.schinazi-httpbis-doh-preference-hints:
   MSCVUS:
    title: Microsoft Corp. v. United States
@@ -52,113 +46,139 @@ This memo discusses the use of a set of different DNS resolvers to reduce privac
 
 # Introduction {#introduction}
 
-Internet communications are increasingly protected, by use of encryption {{RFC8446}}, {{RFC8484}}, {{I-D.ietf-quic-transport}}, {{I-D.ietf-tls-esni}}.
+This document discusses the privacy aspects of DNS {{!DNS=RFC1035}} from the narrow perspective of using multiple recursive resolvers.
 
-When a DNS client {{RFC1035}} uses a resolver service, that service learns what applications the user is using, what web sites are visited, and so on. Even with the protection of communications, DNS resolvers themselves remain as a persistent vulnerability with respect to privacy as it is aware of both the client and their usage patterns.
+...
 
-Leaking this information to the Internet infrastructure component such as a DNS resolver service can be problematic when the service is not entirely trusted. And even when  the service is trusted and well maintained, legal and commercial pressures or surveillance activity may result in some of the information given to the service to be misused, particularly when a service holds information for a large number of users. This is not desirable.
+The DNS protocol {{!DNS=RFC1035}} provides no confidentiality; and therefore no privacy protections for queries.  Encryption of DNS transport between stub and recursive resolvers as defined in {{!DOT=RFC7858}} and {{!DOH=RFC8484}} provides confidentiality for DNS queries between a stub and a recursive resolver.
 
-Defending against privacy leaks for DNS queries is particularly important given the prevalence of pervasive surveillance efforts {{RFC7258}}.
+Recursive resolvers present a privacy dichotomy for clients.  A recursive resolver that aggregates queries from multiple clients provides a measure of anonymity for those clients, both for authoritative servers and from other observers on the network.  Aggregating requests from multiple clients makes it difficult for these entities to correlate queries with specific clients.  The potential for a recursive to answer queries from cache further improves this privacy advantage, while providing significant query latency gains.  However, because the recursive resolver sees and can record DNS queries, using a recursive resolver creates a privacy exposure for clients.
 
-This memo discusses the use of a set of different DNS resolvers to reduce privacy problems related to DNS resolvers. The architectural principle followed here is one of attempting to avoid high-value targets and the concentration of any individual users's information in one place. We outline a number of different strategies for distributing queries to the different resolvers and analyze the privacy and other impacts of those strategies. Our observation is that a simplistic models -- such as a round-robin algorithm -- are not necessarily the best suited for this task.
+A client might decide to trust a particular recursive resolver with information about DNS queries.  However, it is difficult or impossible to provide any guarantees about data handling practices in the general case.  And even if a service can be trusted to respect privacy with respect to handling of query data, legal and commercial pressures or surveillance activity could result misuse of data.  Similarly, it is not possible to make any guarantees about attacks on services.  For a service with many clients, these risks are particularly undesirable.
 
-The focus of this document is precisely only the choice of a resolver from a known set. There are many other worthwhile topics in the general space of providing better confidentiality or privacy for DNS queries, or for operating encrypted DNS query services. Topics such as resolver discovery, operational practices at any individial resolver service, etc. are outside the scope of this memo.
+This memo describes techniques for distributing DNS queries between multiple recursive resolvers from a known set.  The goal is to reduce the amount of information that any signal DNS resolver is able to gain and thereby reduce the amount of privacy-sensitive information that can be collected in one place.  The characteristics of different choices are examined.
+
+An important outcome of this analysis is that simplistic methods for distributing queries -- such as a round-robin algorithm -- have considerably worse privacy characteristics than using a single recursive resolver.
 
 The rest of this memo is organized as follows. {{goals}} specifies the requirements that we would like such a distribution arrangement to provide. {{algorithms}} discusses the different strategies, and makes some early recommendations among the strategies. {{furtherwork}} discusses potential further work in this area.
 
-# Goals {#goals}
+# Goals and Constraints {#goals}
 
-There are many possible goals for building distributed services, with the most typical one being the ability to scale to be able to serve large number of clients. This memo is not focused on this aspect, but rather looks at distributing queries to different resolver service providers to provide privacy benefits.
+This document aims to reduce the concentration of information about client activity by distributing DNS queries across different resolver services, for all DNS queries in the aggregate and for DNS queries made by individual clients.  By distributing queries in this way, the goal is to reduce the amount of information that any given DNS resolver service can acquire about client activity.
 
-The background for looking at different service providers is that it is unlikely that there are significant difference with regards to privacy issues within the same provider, even if its servers are distributed in different locations. Any technical vulnerabilities or commercial objectives apply throughout such networks anyway, and government and surveillance activities seem to have extraterritorial reach (see, e.g., {{MSCVUS}}).
+Any method for distributing queries from a single client needs to consider the risk of increasing the total amount of private information that is exposed by distributing queries -- and associated information -- to multiple DNS resolvers.  In the extreme, any design that results in replicating the same query toward multiple services would be a net privacy loss.  More subtle leaks arise as a result of distributing queries for sub-domains and even domains that are superficially unrelated, because these could share a commonality that might be exploited to link them.
 
-As a result, the main privacy question is how to reduce information learned by any individual resolver service provider through distribution of queries from different clients.
+For instance, some web sites use names that are appear unrelated to their primary name for hosting some kinds of content, like static images or videos.  If queries for these unrelated names were sent to different services, that effectively allows multiple resolvers to learn that the client accessed the web site.
 
-Some of the basic goals that this distribution should achieve include:
+A distribution scheme also needs to consider stability of query routing over time.  A resolver can observve the absence of queries and infer things about the state of a client cache, which can reveal that queries were made to other resolvers.
 
-* Not concentrating information from all clients to a single resolver service.
+In effect, there are two goals in tension:
 
-* Reducing the information given out regarding a single client to any individual resolver service.
+* to split queries between as many different resolvers as possible; and
 
-The latter goal can be broken further down to:
+* to reduce the spread of information about related queries across multiple resolvers.
 
-* Avoiding sending queries about the same destination to different services, as otherwise the result is worse than not doing any distribution at all: all the different services will eventually get the same information about a particular client.
-
-* Avoiding sending queries about related destinations (*.example.com) to different services, as otherwise the different services will likely conclude that the client is using the "example.com" service anyway, regardless of the individual sub-domains accessed on specific requests.
-
-* For browsers, avoiding sending queries about destinations on the same page (https://example.com pulls an image from https://anotherexample.com) to different servers. This is because there is a possibility of correlation that  lets someone determine that the user was on that page.
-
-* Otherwise, sending queries about different things to different servers, to keep each server aware of minimal information about a particular client.
-
-Some of these goals depend on which component in a system is performing the queries. The web page goal above can only be done by browsers, whereas the other rules could also be implemented in an OS-based resolver client.
+The need to limit replication of private information about queries eliminates simplistic distribution schemes, such as those discussed in {{bad-algorithms}}.  The designs described in {{algorithms}} all attempt to balance these different goals using different properties from the context of a query ({{clientbased}}) or the query name itself ({{namebased}}).
 
 Note that there are also other possible goals, e.g., around discovery of DNS servers (see, e.g., {{I-D.schinazi-httpbis-doh-preference-hints}}). These goals are outside the scope of this memo, as it is only concerned with selection from a set of known servers.
 
-# Potential selection algorithms {#algorithms}
+# Query distribution algorithms {#algorithms}
 
 This section introduces and analyzes several potential strategies for distributing queries to different resolvers. Each strategy is formulated as an algorithm for choosing a resolver Ri from a set of n resolvers R1, R2, ...,  Rn.
 
-Note that the list of algorithms may grow in a future version of this memo; this set is the initially analyzed set.
+The designs presented in {{algorithms}} assume that the stub resolver performing distribution of queries has varying degrees of contextual information.  In general, more contextual information allows for finer-grained distribution of information between resolvers.
 
 ## Client-based {#clientbased}
 
-The simplest algorithm is to distribute each different client to a different resolver. This reduces the number of users any particular service will know about. However, in order to function properly, this methods needs to apply some kind of stable assignment mechanism, e.g., a stable hash.
+The simplest algorithm is to distribute each different client to a different resolver. This reduces the number of users any particular service will know about.  However, this does little to protect an individual user from the aggregation of information about queries at the selected resolver.
 
-One way of doing this is to hash the client's identity in some manner:
+In this design clients select and consistently use the same resolver.  This might be achieved by randomly selecting and remembering a resolver.  Alternatively, a resolver might be selected using consistent hashing that takes some conception of client identity as input:
 
     i = h(client identity) % n
 
-Note that the client identity can (and should) be something that remains private to the client itself; the resolver service need not be told about the identity, even if the client's concept of its own identity leads it to select a particular resolver service. To avoid disclosing DNS usage patterns to all resolvers, the identity needs to be persistent information, perhaps obtained from the operating system, user account, hardware, or a random value chosen upon the first use of the application.
+For the purposes of this determination, a client might be an entire device, with the selection being made at the operating system level, or it could be a selection made by individual applications.  In the extreme, an individual application might be able to partition its activities in a way that allows it to direct queries to multiple resolvers.
 
-While this algorithm satisfies the first overall goal in {{goals}}, it does nothing about splitting information regarding a particular client to different services. The only privacy benefit it provides is that it reduces the number of clients that each resolver service provider has information about. This may discourage attacking that service, or forcing the service to give out information. But for each individual client, there is still some resolver service that knows everything about the user's DNS usage patterns.
+### Analysis of client-based selection
 
-## Random
+Where different applications make independent resolver selections, activities that involve multiple applications can result in information about those activities being exposed to multiple resolvers.  For instance, an application could open another application for the purposes of handling a specific file type or to load a URL.  This could expose queries related to the activity as a whole to multiple resolvers.
 
-Another simple algorithm is a random selection:
+Even making different selections at the level of a device can result in replicating related information to multiple resolvers.  For instance, an individual who uses a particular application on multiple devices might perform similar activities on those devices, but have DNS queries distributed to different resolvers.
 
-    i = rand() % n
+While this algorithm provides distribution of DNS queries in the aggregate, it does little to divide information about a particular client between resolvers. It effectively only reduces the number of clients that each resolver can acquire information about. This provides systemic benefit, but does not provide individual clients with any significant advantage as there is still some resolver service that has a complete view of the user's DNS usage patterns.
 
-This has the drawback of (over-time) providing information about all clients to all services. While this happens slowly, and does not affect names that are not regularly visited, it still seems to be a serious problem in this approach.
+### Enhancements to client-based selection {#discontinuous}
 
-## Round-robin
+Clients can break continuity of records by occasionally resetting state so that a different resolver is selected.  A client might choose to do this when it shuts down, or when it moves to a new network location.
 
-The clients can also choose to use a new resolver service either for every query or upon client boot:
-
-    i = counter++ % n
-
-This has largely the same downsides as the random algorithm.
+Breaking continuity is less effective if any state, in particular cached results, is retained across the change.  If activities that depend on DNS querying are continued across the change then it might be possible for the old resolver to make inferences about the activity on the new resolver, or the new resolver to make similar guesses about past activity.  As many modern applications provide session continuity features across shutdowns and crashes, this can mean that finding an appropriate point in time to perform a switch.
 
 ## Name-based {#namebased}
 
-The clients may distribute their queries based on the name being queried. This results in different names going to different services, e.g., a social network name goes to a different service than a search engine name:
+Clients might also additionally attempt to distribute queries based on the name being queried.  This results in different names going to different resolvers.
+
+A naïve algorithm for name distribution uses the target name as input to a fixed hash:
 
     i = h(queried name) % n
 
-This approach may also be extended to cover moving hosts by incorporating the public IP address of the host, such that when the host moves, the distribution changes. For this to work the DNS query protocol must not be fingerprintable. Similarly, one may also include the client id as in the {{clientbased}} approach. The full equation for all of these is:
+However, this simplistic approach fails to prevent related queries from being distributed to different resolvers in several ways.  For instance, queries that are executed after receiving a CNAME record in a response will leak the same information as the original query that resulted in the CNAME record.  Services that use related domain names -- such as where "example.com" uses "static.example.com" or "cdn.example" -- might reveal the use of the combined service to a resolver that receives a query for any associated name.  In both cases, sensitive information is effectively replicated across multiple resolvers.
 
-    i = h(client identity|queried name|client public address) % n
+### Name reduction
 
-When the hash function only takes into account the name and nothing else, different clients will algorithmically arrive at the use of the same resolver for the same names. This can be undesirable. When address and identity information is used alongside the name, this is no longer a problem.
+In order to reduce the effect of distributing similar names to different servers, a grouping mechanism might be used.  Leading labels in names might be erased before being input to the hashing algorithm.  This requires that the part of the suffix that is shared between different services can be identified.  For the purposes of ensuring that queries are consistently routed to the same resolver, a weak signal is likely sufficient.
 
-Note that any hash-based distribution to a set of resolvers may or may not distribute traffic to the resolvers equally. For instance, a popular domain may get a lot of queries, but is just one name from the point of view of the hash. Further work may be needed on this.
+Several options for grouping domain names into equivalence sets might be used:
 
-## Suffix-based
+* The [public suffix list](https://publicsuffix.org/) provides a manually curated list of shared domain suffixes.  Names can be reduced to include one label more than the list allows, referred to as effective top-level domain plus one (eTLD+1).  This reduces the number of cases where queries for domains under the same administrative control are sent to different resolvers.
 
-A variant of the {{namebased}} approach is that one does not consider the full name, but rather the main domain, i.e., example.com rather than www.example.com. To do this, one can use a public suffix list that provides information about commonly used domain names.
+* Services often relies on multiple domain names across different eTLD+1 domains.  Developing equivalence sets might be needed to avoid broadcasting queries to servers.  Mozilla maintains a manually curated [equivalence list](https://github.com/mozilla-services/shavar-prod-lists/blob/master/disconnect-entitylist.json) for web sites that aims to maps the complete set of unrelated names used by services to a single service name.
 
-The equation then becomes:
+* Other technologies, such as the proposed [first party sets](https://github.com/krgovind/first-party-sets) or the abandoned DBOUND {{?DBOUND=I-D.levine-dbound-dns}} provide domain owners a means to declare some form of equivalence for different names.
 
-    i = h(client identity|organization suffix of the queried name|
-          client public address) %  n
+Each of these techniques are potentially unreliable in different ways.  Additionally, these could skew the distribution of queries in ways that might concentrate information on particular resolvers.
 
-## Early recommendations
+# Effects of query distribution
 
-The name- and suffix-based approaches seem to be more capable than random- or round-robin -based approaches.
+Choosing to use more than one DNS resolver has broader implications than just the effect on privacy.  Using multiple resolvers is a significant change from the assumed model where stub resolvers send all queries to a single resolver.
+
+## Caching considerations {#caching}
+
+Using a common cache for multiple resolvers introduces the possibility that a resolver could learn about queries that were originally directed to another resolvers by observing the absence of queries.  Though this can reduce caching performance, clients can address this by having a per-resolver cache and only using the cache for the selected resolver.
+
+## Consistency considerations
+
+Making the same query to multiple resolvers can result in different answers.  For instance, DNS-based load balancing can lead to different answers being produced over time or for different query origins.  Or, different resolvers might have different policies with respect to blocking or filtering of queries that lead to clients receiving inconsistent answers.
+
+In the extreme, an application might encounter errors as a result of receiving incompatible answers, particularly if a server operator (incorrectly) assumes that different DNS queries for the same client always originate from the same source address.  This is most likely to occur if name-based selection is used, as queries could be related based on information that the client does not consider.
+
+## Resolver load distribution
+
+Any selection of resolvers that is based on random inputs will need to account for available capacity on resolvers.  Otherwise, resolvers with less available query-processing capacity will receive too high a proportion of all queries.  Clients only need to be informed of relative available capacity in order to make an appropriate selection.  How relative capacities of resolvers are determined is not in scope for this document.
+
+## Query performance
+
+Distribution of queries between resolvers also means that clients are exposed to greater variations in performance.
+
+# Poor distribution algorithms {#bad-algorithms}
+
+Random allocation to a resolver might be implemented:
+
+    i = rand() % n
+
+Similar drawbacks can be seen where clients iterate over available resolvers:
+
+    i = counter++ % n
+
+Whether this choice is made on a per-query basis, these two methods eventually provide information about all queries to all resolvers over time.  Domain names are often queried many times over long periods, so queries for the same domain name will eventually be distributed to all resolvers.  Only one-off queries will avoid being distributed.
+
+Implementing either method at a much slower cadence might be effective, subject to the constraints in {{discontinuous}}.  This only slows the distribution of information about repeated queries to all resolvers.
 
 # Further work {#furtherwork}
 
-TBD
+More work is needed to determine factors other than privacy that could motivate having queries routed to the same resolver.
+
+
+--- back
 
 # Acknowledgements {#ack}
 
-The authors would like to thank Christian Huitema, Ari Keranen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kuhlewind, David Allan, Daniel Migault and many others for interesting discussions in this problem space.
+The authors would like to thank Christian Huitema, Ari Keränen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kühlewind, David Allan, Daniel Migault and many others for interesting discussions in this problem space.
