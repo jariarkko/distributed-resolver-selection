@@ -154,11 +154,11 @@ Each of these techniques are imperfect in different ways. They may also skew the
 
 # Early conclusions {#conclusions}
 
-Both the client-based and more advanced name-based strategies provide benefits. The former provides primarily a systemic benefit, while the latter provides some privacy benefits also to each individual client. However, neither strategy is perfect, and can leak the same information to multiple resolvers in some cases.
+Both the client-based and more advanced name-based strategies provide benefits. The former provides primarily a systemic benefit, while the latter provides also some privacy benefits to each individual client. However, neither strategy is perfect, and can leak the same information to multiple resolvers in some cases.
 
 Both strategies are, however, likely generally beneficial in the common cases, and can improve the overall privacy situation. And they are certainly a considerable privacy improvement over a situation where a large number of clients use a single resolver.
 
-Their use may also reduce any pressures against specific resolvers, as information available in these specific resolvers does not constitute all information about all clients. As such, the use of one of these distribution strategies is recommended, as long as the any operational issues can resolved and sufficient testing performed.
+Their use may also reduce any pressures against specific resolvers, as information available in these specific resolvers does not constitute all information about all clients. As such, the use of one of these distribution strategies is tentatively recommended, subject to further testing, discussion, and resolving any remaining operational issues.
 
 The naive name-based strategy is, however, not recommended, and neither are other, even simpler strategies listed in {{bad-algorithms}}. It should be noted that no technique presented in this memo can defend against a situation where an actor such as a surveillance agency has access to information from all resolvers.
 
@@ -220,4 +220,4 @@ Finally, more work is needed to determine factors other than privacy that could 
 
 # Acknowledgements {#ack}
 
-The authors would like to thank Christian Huitema, Ari Keränen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kühlewind, David Allan, Daniel Migault and many others for interesting discussions in this problem space.
+The authors would like to thank Christian Huitema, Ari Keränen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kühlewind, David Allan, Daniel Migault Goran AP Eriksson, and many others for interesting discussions in this problem space.
