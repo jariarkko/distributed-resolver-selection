@@ -224,4 +224,4 @@ Finally, more work is needed to determine factors other than privacy that could 
 
 # Acknowledgements {#ack}
 
-The authors would like to thank Christian Huitema, Ari Keränen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kühlewind, David Allan, Daniel Migault Goran AP Eriksson, and many others for interesting discussions in this problem space.
+The authors would like to thank Christian Huitema, Ari Keränen, Mark Nottingham, Stephen Farrell, Gonzalo Camarillo, Mirja Kühlewind, David Allan, Daniel Migault, Goran AP Eriksson, and many others for interesting discussions in this problem space.
