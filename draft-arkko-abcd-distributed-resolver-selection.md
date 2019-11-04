@@ -198,7 +198,7 @@ In the extreme, an application might encounter errors as a result of receiving i
 
 Any selection of resolvers that is based on random inputs will need to account for available capacity on resolvers.  Otherwise, resolvers with less available query-processing capacity will receive too high a proportion of all queries.  Clients only need to be informed of relative available capacity in order to make an appropriate selection.  How relative capacities of resolvers are determined is not in scope for this document.
 
-The choice of different resolvers would also need to work well with whatever mechanisms exist for failover to alternate resolvers when one is not responsive.
+The choice of different resolvers would also need to work well with whatever mechanisms exist for failover to alternate resolvers when one is not responsive. The same is true of IPv4/IPv6 connectivity, the availability of communications to specific ports, etc. And the dynamic situation should obviously not lead to extensive leakage to different resolvers, either.
 
 ## Query performance
 
