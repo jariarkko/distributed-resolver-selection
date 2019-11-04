@@ -154,7 +154,11 @@ Each of these techniques are imperfect in different ways. They may also skew the
 
 # Early conclusions {#conclusions}
 
+## Analysis conclusions
+
 Both the client-based and more advanced name-based strategies provide benefits. The former provides primarily a systemic benefit, while the latter provides also some privacy benefits to each individual client. However, neither strategy is perfect, and can leak the same information to multiple resolvers in some cases.
+
+## Recommendations
 
 Both strategies are, however, likely generally beneficial in the common cases, and can improve the overall privacy situation. And they are certainly a considerable privacy improvement over a situation where a large number of clients use a single resolver.
 
