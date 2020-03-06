@@ -32,6 +32,17 @@ normative:
 
 informative:
   I-D.schinazi-httpbis-doh-preference-hints:
+  I-D.pauly-dprive-adaptive-dns-privacy:
+  HBSHF19:
+    title: Analyzing the Costs (and Benefits) of DNS, DoT, andDoH for the Modern Web
+    target: https://dl.acm.org/doi/10.1145/3340301.3341129
+    seriesinfo: ANRW '19, July 22, 2019, Montreal, QC, Canada
+    author:
+      - ins: Austin Hounsel
+      - ins: Kevin Borgolte
+      - ins: Paul Schmidt
+      - ins: Jordan Holland
+      - ins: Nick Feamster
   MSCVUS:
    title: Microsoft Corp. v. United States
    author:
@@ -52,7 +63,7 @@ Traditionally, systems are configured with a single DNS recursive resolver, or a
 
 The resolvers will learn the Internet usage patterns of their clients. A client might decide to trust a particular recursive resolver with information about DNS queries. However, it is difficult or impossible to provide any guarantees about data handling practices in the general case. And even if a service can be trusted to respect privacy with respect to handling of query data, legal and commercial pressures or surveillance activity could result in misuse of data. Similarly, outside attacks may occur towards any DNS services. For a service with many clients, these risks are particularly undesirable.
 
-This memo discusses whether DNS clients can improve their privacy through the potential use of a set of multiple recursive resolver services. The goal is indeed an improvement only. There is no expectation that it would be possible to have no part of the DNS infrastructure aware of what queries are being made, but perhaps there are mitigations that would make possible information collection from the DNS infrastruture harder.
+This memo discusses whether DNS clients can improve their privacy through the potential use of a set of multiple recursive resolver services. The goal is indeed an improvement only. There is no expectation that it would be possible to have no part of the DNS infrastructure aware of what queries are being made, but perhaps there are mitigations that would make possible information collection from the DNS infrastructure harder.
 
 It should be understood that this is a narrow aspect within a bigger set of topics even within privacy issues around DNS, let alone other security issues, deployment models, or the many protocol questions within DNS. Some of these other topics include detecting the tampering DNS query responses {{!DNSSEC=RFC4033}}, encrypting DNS queries {{!DOT=RFC7858}} {{!DOH=RFC8484}}, application-specific DNS resolution mechanisms, or centralised deployment models. Those other topics are not covered in this memo and need to be dealt with elsewhere.
 
@@ -72,7 +83,7 @@ Our perspective is that of a client, choosing to either distribute or not distri
 
 There are obviously additional operational aspect of this -- such as central configuration mechanisms, resolver selection application choices, and so on. But these are not covered in this memo.
 
-It should also be observed that the practices suggested in this memo are currently not widely used. Operational and other issues may be discovered, such as those outlined in {{effects}}. 
+It should also be observed that the practices suggested in this memo are currently not widely used. Operational and other issues may be discovered, such as those outlined in {{effects}}.
 
 Many of these issues need further work, but this memo aims to discuss the concept and analyse its impacts before dwelling into the technical arrangements for configuring and using this particular approach.
 
@@ -88,19 +99,19 @@ Any method for distributing queries from a single client needs to consider these
 
    More subtle leaks arise as a result of distributing queries for sub-domains and even domains that are superficially unrelated, because these could share a commonality that might be exploited to link them. For instance, some web sites use names that are appear unrelated to their primary name for hosting some kinds of content, like static images or videos.  If queries for these unrelated names were sent to different services, that effectively allows multiple resolvers to learn that the client accessed the web site.
 
-A distribution scheme also needs to consider stability of query routing over time.  A resolver can observe the absence of queries and infer things about the state of a client cache, which can reveal that queries were made to other resolvers.
+A distribution scheme also needs to consider stability of query routing over time.  A resolver can observe the absence of queries and infer things about the state of a client cache, which can reveal that queries were made to other resolvers. In general, different queries for the same resolution context, such as sub-resources for a web page load, which have some probability of being related or linked, should be sent to the same resolver. Failure to do so reveals information to more than one resolver.
 
 In effect, there are two goals in tension:
 
-* to split queries between as many different resolvers as possible; and
+* split queries between as many different resolvers as possible; and
 
-* to reduce the spread of information about related queries across multiple resolvers.
+* reduce the spread of linkable queries across multiple resolvers.
 
 The need to limit replication of private information about queries eliminates naive distribution schemes, such as those discussed in {{bad-algorithms}}.  The designs described in {{algorithms}} all attempt to balance these different goals using different properties from the context of a query ({{clientbased}}) or the query name itself ({{namebased}}).
 
 # Query distribution strategies {#algorithms}
 
-This section introduces and analyzes several potential strategies for distributing queries to different resolvers. Each strategy is formulated as an algorithm for choosing a resolver Ri from a set of n resolvers R1, R2, ...,  Rn.
+This section introduces and analyzes several potential strategies for distributing queries to different resolvers. Each strategy is formulated as an algorithm for choosing a resolver Ri from a set of n resolvers {R1, R2, ..., Rn}.
 
 The designs presented in {{algorithms}} assume that the stub resolver performing distribution of queries has varying degrees of contextual information.  In general, more contextual information allows for finer-grained distribution of information between resolvers.
 
@@ -150,13 +161,13 @@ Several options for grouping domain names into equivalence sets might be used:
 
 * Other technologies, such as the proposed [first party sets](https://github.com/krgovind/first-party-sets) or the abandoned DBOUND {{?DBOUND=I-D.levine-dbound-dns}} provide domain owners a means to declare some form of equivalence for different names.
 
-Each of these techniques are imperfect in different ways. They may also skew the distribution of queries in ways that might concentrate information on particular resolvers.
+Each of these techniques are imperfect in different ways. They may also skew the distribution of queries in ways that might concentrate information on particular resolvers. Moreover, resolver choice based solely on public information rather than per-client information reduces the anonymity set of queries sent to each resolver. In contrast to a client-based strategy, attackers can predict the target resolver for a given name using a name-based strategy. This may have implications for on-path attacker attempts to identify otherwise encrypted queries.
 
 # Early conclusions {#conclusions}
 
 ## Analysis conclusions
 
-Both the client-based and more advanced name-based strategies provide benefits. The former provides primarily a systemic benefit, while the latter provides also some privacy benefits to each individual client. However, neither strategy is perfect, and can leak the same information to multiple resolvers in some cases.
+Both the client-based and more advanced name-based strategies may provide benefits. The former may provide primarily a systemic benefit, while the latter may provide also some privacy benefits to each individual client. However, neither strategy is perfect, and can leak the same information to multiple resolvers in some cases.
 
 ## Recommendations
 
@@ -202,7 +213,7 @@ The choice of different resolvers would also need to work well with whatever mec
 
 ## Query performance
 
-Distribution of queries between resolvers also means that clients are exposed to greater variations in performance.
+Distribution of queries between resolvers also means that clients are exposed to greater variations in performance {{HBSHF19}}. In contrast, using a single resolver, as would result from the client-based method in {{clientbased}}, promotes use of a persistent connection.
 
 ## Debugging
 
@@ -212,7 +223,7 @@ The use of multiple resolvers may complicate debugging.
 
 Should there be interest in the deployment of ideas laid out in this memo, further work is needed. There would have to be ways to configure systems to use multiple resolvers, including for instance:
 
-* Central configuration mechanisms to enable the use of multiple resolvers, perhaps through usual network configuration mechanisms or choices made by applications using resolver services directly. It may also be necessary to employ discovery mechanisms, such as, e.g., {{I-D.schinazi-httpbis-doh-preference-hints}}  (but see {{goals}}).
+* Central configuration mechanisms to enable the use of multiple resolvers, perhaps through usual network configuration mechanisms or choices made by applications using resolver services directly. It may also be necessary to employ discovery mechanisms, such as, e.g., {{I-D.schinazi-httpbis-doh-preference-hints}} or {{I-D.pauly-dprive-adaptive-dns-privacy}} (but see {{goals}})
 
 * Mechanisms to allow both failover to working resolvers when a resolver is unreachable,
 
